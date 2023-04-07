@@ -157,7 +157,7 @@ function _Home() {
               />
             </div>
             <div className={styles["sidebar-action"]}>
-              <a href={"https://chatgpt.u3y.cn/"} target="_blank">
+              <a href={"https://github.com/baocoo/ChatGPT-test/"} target="_blank">
                 <IconButton icon={<GithubIcon />} shadow />
               </a>
             </div>
