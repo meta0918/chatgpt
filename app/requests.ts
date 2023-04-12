@@ -1,4 +1,4 @@
-import type { ChatRequest, ChatReponse } from "./api/openai/typing";
+import type { ChatRequest, ChatResponse } from "./api/openai/typing";
 import { Message, ModelConfig, useAccessStore, useChatStore } from "./store";
 import { showToast } from "./components/ui-lib";
 
@@ -9,7 +9,7 @@ const makeRequestParam = (
   options?: {
     filterBot?: boolean;
     stream?: boolean;
-  }
+  },
 ): ChatRequest => {
   let sendMessages = messages.map((v) => ({
     role: v.role,
@@ -20,7 +20,11 @@ const makeRequestParam = (
     sendMessages = sendMessages.filter((m) => m.role !== "assistant");
   }
 
-  const modelConfig = useChatStore.getState().config.modelConfig;
+  const modelConfig = { ...useChatStore.getState().config.modelConfig };
+
+  // @yidadaa: wont send max_tokens, because it is nonsense for Muggles
+  // @ts-expect-error
+  delete modelConfig.max_tokens;
 
   return {
     messages: sendMessages,
@@ -63,7 +67,7 @@ export async function requestChat(messages: Message[]) {
   const res = await requestOpenaiClient("v1/chat/completions")(req);
 
   try {
-    const response = (await res.json()) as ChatReponse;
+    const response = (await res.json()) as ChatResponse;
     return response;
   } catch (error) {
     console.error("[Request Chat] ", error, res.body);
@@ -84,7 +88,7 @@ export async function requestUsage() {
 
   const [used, subs] = await Promise.all([
     requestOpenaiClient(
-      `dashboard/billing/usage?start_date=${startDate}&end_date=${endDate}`
+      `dashboard/billing/usage?start_date=${startDate}&end_date=${endDate}`,
     )(null, "GET"),
     requestOpenaiClient("dashboard/billing/subscription")(null, "GET"),
   ]);
@@ -124,7 +128,7 @@ export async function requestChatStream(
     onMessage: (message: string, done: boolean) => void;
     onError: (error: Error, statusCode?: number) => void;
     onController?: (controller: AbortController) => void;
-  }
+  },
 ) {
   const req = makeRequestParam(messages, {
     stream: true,
@@ -167,10 +171,15 @@ export async function requestChatStream(
         const resTimeoutId = setTimeout(() => finish(), TIME_OUT_MS);
         const content = await reader?.read();
         clearTimeout(resTimeoutId);
-        const text = decoder.decode(content?.value);
+      
+        if (!content || !content.value) {
+          break;
+        }
+      
+        const text = decoder.decode(content.value, { stream: true });
         responseText += text;
 
-        const done = !content || content.done;
+        const done = content.done;
         options?.onMessage(responseText, false);
 
         if (done) {
@@ -213,7 +222,7 @@ export const ControllerPool = {
   addController(
     sessionIndex: number,
     messageId: number,
-    controller: AbortController
+    controller: AbortController,
   ) {
     const key = this.key(sessionIndex, messageId);
     this.controllers[key] = controller;
